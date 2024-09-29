@@ -6,4 +6,4 @@ from datetime import datetime
 
 @app.route("/healthcheck", methods=["GET"])
 def healthcheck():
-    return jsonify(datetime.today())
+    return jsonify(datetime.today()), 200
