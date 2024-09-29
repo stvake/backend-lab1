@@ -6,4 +6,9 @@ from datetime import datetime
 
 @app.route("/healthcheck", methods=["GET"])
 def healthcheck():
-    return jsonify(datetime.today()), 200
+    response = {
+        "message": "Healthcheck is running",
+        "date": datetime.today(),
+        "status": "ok"
+    }
+    return jsonify(response), 200
