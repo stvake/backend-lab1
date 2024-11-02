@@ -1,3 +1,5 @@
+from datetime import datetime
+
 users = []
 categories = []
 records = []
@@ -37,6 +39,7 @@ def delete_category(category_id):
 
 # records
 def add_record(record):
+    record["creation_time"] = datetime.today()
     records.append(record)
 
 def get_record_by_id(record_id):
