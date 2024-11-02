@@ -1,5 +1,5 @@
 from app import app
-import database as db
+from app import database as db
 
 from flask import jsonify, request
 from datetime import datetime
