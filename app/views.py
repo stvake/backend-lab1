@@ -17,9 +17,7 @@ def healthcheck():
 
 @app.post("/user")
 def create_user():
-    user = request.get_json()
-    db.users.append(user)
-
+    db.add_user(request.get_json())
     response = {
         "message": "User created",
         "date": datetime.today(),
