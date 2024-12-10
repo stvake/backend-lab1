@@ -24,6 +24,6 @@ class AccountSchema(Schema):
     balance = fields.Float()
 
 
-class ExpenseSchema(Schema):
+class FundsSchema(Schema):
     user_id = fields.Int(required=True)
     amount = fields.Float(required=True)

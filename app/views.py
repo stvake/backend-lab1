@@ -15,7 +15,7 @@ categories_schema = CategorySchema()
 records_schema = RecordSchema()
 
 account_schema = AccountSchema()
-expense_schema = ExpenseSchema()
+funds_schema = FundsSchema()
 
 
 @views.get("/healthcheck")
@@ -143,7 +143,7 @@ def db_check():
         return jsonify({"message": "Database connection failed", "error": str(e)}), 500
 
 
-@views.post("/account")
+@views.post("/accounts/create")
 def create_account():
     data = request.get_json()
     err = account_schema.validate(data)
@@ -160,6 +160,27 @@ def create_account():
     return jsonify(account_schema.dump(account)), 201
 
 
+@views.post("/accounts/add-funds")
+def add_funds():
+    data = request.get_json()
+    err = funds_schema.validate(data)
+    if err:
+        return jsonify(err), 400
+
+    account = Accounts.query.filter_by(user_id=data['user_id']).first()
+    if not account:
+        return jsonify({"message": "Account not found"}), 404
+
+    account.balance += data['amount']
+    db.session.commit()
+    response = {
+        "message": "Funds added",
+        "amount": data['amount'],
+        "date": datetime.today()
+    }
+    return jsonify(response), 201
+
+
 @views.get("/accounts")
 def get_all_accounts():
     accounts = Accounts.query.all()
@@ -169,7 +190,7 @@ def get_all_accounts():
         return jsonify({"message": "Accounts not found"}), 404
 
 
-@views.get("/account/user")
+@views.get("/accounts/user")
 def get_account_by_user_id():
     data = request.get_json()
     try:
@@ -184,7 +205,7 @@ def get_account_by_user_id():
         return jsonify({"message": "Account not found"}), 404
 
 
-@views.delete("/account")
+@views.delete("/accounts/user")
 def delete_account():
     data = request.get_json()
     try:
@@ -201,10 +222,10 @@ def delete_account():
     return jsonify({"message": "Account deleted"}), 200
 
 
-@views.post("/expense")
+@views.post("/expenses")
 def create_expense():
     data = request.get_json()
-    err = expense_schema.validate(data)
+    err = funds_schema.validate(data)
     if err:
         return jsonify(err), 400
 
