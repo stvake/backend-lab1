@@ -15,6 +15,7 @@ categories_schema = CategorySchema()
 records_schema = RecordSchema()
 
 account_schema = AccountSchema()
+expense_schema = ExpenseSchema()
 
 
 @views.get("/healthcheck")
@@ -198,3 +199,27 @@ def delete_account():
     db.session.delete(account)
     db.session.commit()
     return jsonify({"message": "Account deleted"}), 200
+
+
+@views.post("/expense")
+def create_expense():
+    data = request.get_json()
+    err = expense_schema.validate(data)
+    if err:
+        return jsonify(err), 400
+
+    account = Accounts.query.filter_by(user_id=data['user_id']).first()
+    if not account:
+        return jsonify({"message": "Account not found"}), 404
+
+    if account.balance >= data['amount']:
+        account.balance -= data['amount']
+        db.session.commit()
+        response = {
+            "message": "Expense created",
+            "amount": data['amount'],
+            "date": datetime.today()
+        }
+        return jsonify(response), 201
+    else:
+        return jsonify({"message": "Insufficient funds, operation aborted"}), 400
