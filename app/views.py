@@ -1,17 +1,19 @@
-from app import app
-from app import mock_database as mk_db
-
-from flask import jsonify, request
 from datetime import datetime
 
+from flask import Blueprint, jsonify, request
+
+from app import mock_database as mk_db
 from app.schemas import *
 
+views = Blueprint("views", __name__)
+
+account_schema = AccountSchema()
 user_schema = UserSchema()
 categories_schema = CategorySchema()
 records_schema = RecordSchema()
 
 
-@app.get("/healthcheck")
+@views.get("/healthcheck")
 def healthcheck():
     response = {
         "message": "Healthcheck is running",
@@ -22,7 +24,7 @@ def healthcheck():
 
 
 # users
-@app.post("/user")
+@views.post("/user")
 def create_user():
     mk_db.add_user(request.get_json())
     err = user_schema.validate(request.get_json())
@@ -36,12 +38,12 @@ def create_user():
     return jsonify(response), 201
 
 
-@app.get("/users")
+@views.get("/users")
 def get_users():
     return jsonify(mk_db.get_all_users()), 200
 
 
-@app.get("/user/<int:user_id>")
+@views.get("/user/<int:user_id>")
 def get_user(user_id):
     user = mk_db.get_user_by_id(user_id)
     if user:
@@ -49,7 +51,7 @@ def get_user(user_id):
     return jsonify({"message": "User not found"}), 404
 
 
-@app.delete("/user/<int:user_id>")
+@views.delete("/user/<int:user_id>")
 def delete_user(user_id):
     if mk_db.delete_user_by_id(user_id):
         return jsonify({"message": "User deleted"}), 200
@@ -57,7 +59,7 @@ def delete_user(user_id):
 
 
 # categories
-@app.post("/category")
+@views.post("/category")
 def create_category():
     category = request.get_json()
     err = categories_schema.validate(request.get_json())
@@ -72,12 +74,12 @@ def create_category():
     return jsonify(response), 201
 
 
-@app.get("/category")
+@views.get("/category")
 def get_categories():
     return jsonify(mk_db.get_all_categories()), 200
 
 
-@app.delete("/category/<int:category_id>")
+@views.delete("/category/<int:category_id>")
 def delete_category(category_id):
     if mk_db.delete_category(category_id):
         return jsonify({"message": "Category deleted"}), 200
@@ -85,7 +87,7 @@ def delete_category(category_id):
 
 
 # records
-@app.post("/record")
+@views.post("/record")
 def create_record():
     record = request.get_json()
     err = records_schema.validate(request.get_json())
@@ -100,7 +102,7 @@ def create_record():
     return jsonify(response), 201
 
 
-@app.get("/record/<int:record_id>")
+@views.get("/record/<int:record_id>")
 def get_record(record_id):
     record = mk_db.get_record_by_id(record_id)
     if record:
@@ -108,14 +110,14 @@ def get_record(record_id):
     return jsonify({"message": "Record not found"}), 404
 
 
-@app.delete("/record/<int:record_id>")
+@views.delete("/record/<int:record_id>")
 def delete_record(record_id):
     if mk_db.delete_record(record_id):
         return jsonify({"message": "Record deleted"}), 200
     return jsonify({"message": "Record not found"}), 404
 
 
-@app.get("/record")
+@views.get("/record")
 def get_records():
     user_id = request.args.get("user_id", type=int)
     category_id = request.args.get("category_id", type=int)
