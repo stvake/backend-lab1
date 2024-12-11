@@ -31,10 +31,11 @@ def healthcheck():
 # users
 @views.post("/user")
 def create_user():
-    mk_db.add_user(request.get_json())
-    err = user_schema.validate(request.get_json())
+    user = request.get_json()
+    err = user_schema.validate(user)
     if err:
         return jsonify(err), 400
+    mk_db.add_user(user)
     response = {
         "message": "User created",
         "date": datetime.today(),
@@ -67,7 +68,7 @@ def delete_user(user_id):
 @views.post("/category")
 def create_category():
     category = request.get_json()
-    err = categories_schema.validate(request.get_json())
+    err = categories_schema.validate(category)
     if err:
         return jsonify(err), 400
     mk_db.add_category(category)
@@ -95,7 +96,7 @@ def delete_category(category_id):
 @views.post("/record")
 def create_record():
     record = request.get_json()
-    err = records_schema.validate(request.get_json())
+    err = records_schema.validate(record)
     if err:
         return jsonify(err), 400
     mk_db.add_record(record)
