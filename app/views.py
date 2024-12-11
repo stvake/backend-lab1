@@ -190,14 +190,8 @@ def get_all_accounts():
         return jsonify({"message": "Accounts not found"}), 404
 
 
-@views.get("/accounts/user")
-def get_account_by_user_id():
-    data = request.get_json()
-    try:
-        user_id = int(data['user_id'])
-    except ValueError:
-        return jsonify({"message": "user_id is not valid"}), 400
-
+@views.get("/accounts/user/<int:user_id>")
+def get_account_by_user_id(user_id):
     account = Accounts.query.filter_by(user_id=user_id).first()
     if account:
         return jsonify(account_schema.dump(account)), 200
