@@ -6,3 +6,4 @@ SQLALCHEMY_DATABASE_URI = f'postgresql://{os.environ["POSTGRES_USER"]}:{os.envir
 SQLALCHEMY_TRACK_MODIFICATIONS = False
 API_TITLE = "Finance REST API"
 API_VERSION = "v1"
+JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY")
