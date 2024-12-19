@@ -1,11 +1,13 @@
 from datetime import datetime
 
 from flask import Blueprint, jsonify, request
-from psycopg2.errorcodes import UNIQUE_VIOLATION
+from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity
+from passlib.handlers.pbkdf2 import pbkdf2_sha256
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.sql import text
 
 from app import mock_database as mk_db
-from app.models import db, Accounts
+from app.models import db, Accounts, User
 from app.schemas import *
 
 views = Blueprint("views", __name__)
@@ -29,39 +31,79 @@ def healthcheck():
 
 
 # users
-@views.post("/user")
-def create_user():
-    user = request.get_json()
-    err = user_schema.validate(user)
+@views.post("/user/register")
+def register_user():
+    user_data = request.get_json()
+    err = user_schema.validate(user_data)
     if err:
         return jsonify(err), 400
-    mk_db.add_user(user)
+
+    user = User(
+        username=user_data["username"],
+        password=pbkdf2_sha256.hash(user_data["password"])
+    )
+
+    try:
+        db.session.add(user)
+        db.session.commit()
+    except IntegrityError:
+        db.session.rollback()
+        return jsonify({"message": "Username already exists"}), 400
+
     response = {
-        "message": "User created",
+        "id": user.id,
+        "message": "User registered",
         "date": datetime.today(),
-        "status": "ok"
     }
     return jsonify(response), 201
 
 
+@views.post("/user/login")
+def login():
+    user_data = request.get_json()
+    username = user_data["username"]
+    password = user_data["password"]
+
+    user = User.query.filter_by(username=username).first()
+    if user and pbkdf2_sha256.verify(password, user.password):
+        access_token = create_access_token(identity=str(user.id))
+        return jsonify({"access_token": access_token}), 200
+    return jsonify({"message": "Invalid credentials"}), 401
+
+
 @views.get("/users")
 def get_users():
-    return jsonify(mk_db.get_all_users()), 200
+    users = User.query.all()
+    return jsonify(user_schema.dump(users, many=True)), 200
 
 
 @views.get("/user/<int:user_id>")
+@jwt_required()
 def get_user(user_id):
-    user = mk_db.get_user_by_id(user_id)
-    if user:
-        return jsonify(user), 200
-    return jsonify({"message": "User not found"}), 404
+    current_user_id = int(get_jwt_identity())
+    if current_user_id != user_id:
+        return jsonify({"message": "Access denied"}), 403
+
+    user = User.query.get(user_id)
+    if not user:
+        return jsonify({"message": "User not found"}), 404
+    return jsonify(user_schema.dump(user)), 200
 
 
 @views.delete("/user/<int:user_id>")
+@jwt_required()
 def delete_user(user_id):
-    if mk_db.delete_user_by_id(user_id):
-        return jsonify({"message": "User deleted"}), 200
-    return jsonify({"message": "User not found"}), 404
+    current_user_id = int(get_jwt_identity())
+    if current_user_id != user_id:
+        return jsonify({"message": "Access denied"}), 403
+
+    user = User.query.get(user_id)
+    if not user:
+        return jsonify({"message": "User not found"}), 404
+
+    db.session.delete(user)
+    db.session.commit()
+    return jsonify({"message": "User deleted"}), 200
 
 
 # categories
@@ -145,28 +187,39 @@ def db_check():
 
 
 @views.post("/accounts/create")
+@jwt_required()
 def create_account():
     data = request.get_json()
     err = account_schema.validate(data)
     if err:
         return jsonify(err), 400
 
+    current_user_id = int(get_jwt_identity())
+    if current_user_id != data["user_id"]:
+        return jsonify({"message": "Access denied"}), 403
+
     try:
         account = Accounts(user_id=data['user_id'], balance=data.get('balance', 0.0))
         db.session.add(account)
         db.session.commit()
-    except UNIQUE_VIOLATION:
-        return jsonify({"message": "Account creation failed", "error": "This user already has an account"}), 400
+    except IntegrityError:
+        db.session.rollback()
+        return jsonify({"message": "Account creation failed", "error": "You already have your account"}), 400
 
     return jsonify(account_schema.dump(account)), 201
 
 
 @views.post("/accounts/add-funds")
+@jwt_required()
 def add_funds():
     data = request.get_json()
     err = funds_schema.validate(data)
     if err:
         return jsonify(err), 400
+
+    current_user_id = int(get_jwt_identity())
+    if current_user_id != data["user_id"]:
+        return jsonify({"message": "Access denied"}), 403
 
     account = Accounts.query.filter_by(user_id=data['user_id']).first()
     if not account:
@@ -192,7 +245,12 @@ def get_all_accounts():
 
 
 @views.get("/accounts/user/<int:user_id>")
+@jwt_required()
 def get_account_by_user_id(user_id):
+    current_user_id = int(get_jwt_identity())
+    if current_user_id != user_id:
+        return jsonify({"message": "Access denied"}), 403
+
     account = Accounts.query.filter_by(user_id=user_id).first()
     if account:
         return jsonify(account_schema.dump(account)), 200
@@ -200,13 +258,12 @@ def get_account_by_user_id(user_id):
         return jsonify({"message": "Account not found"}), 404
 
 
-@views.delete("/accounts/user")
-def delete_account():
-    data = request.get_json()
-    try:
-        user_id = int(data['user_id'])
-    except ValueError:
-        return jsonify({"message": "user_id is not valid"}), 400
+@views.delete("/accounts/user/<int:user_id>")
+@jwt_required()
+def delete_account(user_id):
+    current_user_id = int(get_jwt_identity())
+    if current_user_id != user_id:
+        return jsonify({"message": "Access denied"}), 403
 
     account = Accounts.query.filter_by(user_id=user_id).first()
     if not account:
@@ -218,11 +275,16 @@ def delete_account():
 
 
 @views.post("/expenses")
+@jwt_required()
 def create_expense():
     data = request.get_json()
     err = funds_schema.validate(data)
     if err:
         return jsonify(err), 400
+
+    current_user_id = int(get_jwt_identity())
+    if current_user_id != data["user_id"]:
+        return jsonify({"message": "Access denied"}), 403
 
     account = Accounts.query.filter_by(user_id=data['user_id']).first()
     if not account:
