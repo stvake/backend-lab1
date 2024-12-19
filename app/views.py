@@ -61,6 +61,11 @@ def register_user():
 @views.post("/user/login")
 def login():
     user_data = request.get_json()
+
+    err = user_schema.validate(user_data)
+    if err:
+        return jsonify(err), 400
+
     username = user_data["username"]
     password = user_data["password"]
 
