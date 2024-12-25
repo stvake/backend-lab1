@@ -6,15 +6,16 @@ from passlib.handlers.pbkdf2 import pbkdf2_sha256
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.sql import text
 
-from app import mock_database as mk_db
-from app.models import db, Accounts, User
+from app.models import db, Accounts, User, Category, Record
 from app.schemas import *
 
 views = Blueprint("views", __name__)
 
 user_schema = UserSchema()
 categories_schema = CategorySchema()
+categories_schema_for_output = CategorySchemaForOutput()
 records_schema = RecordSchema()
+records_schema_for_output = RecordSchemaForOutput()
 
 account_schema = AccountSchema()
 funds_schema = FundsSchema()
@@ -117,11 +118,15 @@ def delete_user(user_id):
 # categories
 @views.post("/category")
 def create_category():
-    category = request.get_json()
-    err = categories_schema.validate(category)
+    data = request.get_json()
+    err = categories_schema.validate(data)
     if err:
         return jsonify(err), 400
-    mk_db.add_category(category)
+
+    category = Category(name=data['name'])
+    db.session.add(category)
+    db.session.commit()
+
     response = {
         "message": "Category created",
         "date": datetime.today(),
@@ -132,45 +137,88 @@ def create_category():
 
 @views.get("/category")
 def get_categories():
-    return jsonify(mk_db.get_all_categories()), 200
+    categories = Category.query.all()
+    if categories:
+        return jsonify(categories_schema_for_output.dump(categories, many=True)), 200
+    else:
+        return jsonify({"message": "Categories not found"}), 404
 
 
 @views.delete("/category/<int:category_id>")
 def delete_category(category_id):
-    if mk_db.delete_category(category_id):
-        return jsonify({"message": "Category deleted"}), 200
-    return jsonify({"message": "Category not found"}), 404
+    category = Category.query.filter_by(id=category_id).first()
+    if not category:
+        return jsonify({"message": "Category not found"}), 404
+
+    db.session.delete(category)
+    db.session.commit()
+    return jsonify({"message": "Category deleted"}), 200
 
 
 # records
 @views.post("/record")
+@jwt_required()
 def create_record():
-    record = request.get_json()
-    err = records_schema.validate(record)
+    data = request.get_json()
+    err = records_schema.validate(data)
     if err:
         return jsonify(err), 400
-    mk_db.add_record(record)
-    response = {
-        "message": "Record created",
-        "date": datetime.today(),
-        "status": "ok"
-    }
-    return jsonify(response), 201
+
+    current_user_id = int(get_jwt_identity())
+    if current_user_id != data["user_id"]:
+        return jsonify({"message": "Access denied"}), 403
+
+    user = User.query.filter_by(id=data["user_id"]).first()
+    if not user:
+        return jsonify({"message": "User with the given ID does not exist"}), 400
+    category = Category.query.filter_by(id=data["category_id"]).first()
+    if not category:
+        return jsonify({"message": "Category with the given ID does not exist"}), 400
+
+    account = Accounts.query.filter_by(user_id=data['user_id']).first()
+    if not account:
+        return jsonify({"message": "Account for user with this id not found"}), 400
+
+    if account.balance >= data['money_spent']:
+        record = Record(user_id=user.id, category_id=category.id, money_spent=data["money_spent"])
+        db.session.add(record)
+        account.balance -= data['money_spent']
+        db.session.commit()
+        response = {
+            "message": "Record created",
+            "amount": data['money_spent'],
+            "date": datetime.today(),
+            "status": "ok"
+        }
+        return jsonify(response), 201
+    else:
+        return jsonify({"message": "Insufficient funds, operation aborted"}), 400
 
 
 @views.get("/record/<int:record_id>")
+@jwt_required()
 def get_record(record_id):
-    record = mk_db.get_record_by_id(record_id)
-    if record:
-        return jsonify(record), 200
-    return jsonify({"message": "Record not found"}), 404
+    record = Record.query.filter_by(id=record_id).first()
+
+    current_user_id = int(get_jwt_identity())
+    if current_user_id != record.user_id or not record:
+        return jsonify({"message": "Access denied"}), 403
+
+    return jsonify(records_schema_for_output.dump(record)), 200
 
 
 @views.delete("/record/<int:record_id>")
+@jwt_required()
 def delete_record(record_id):
-    if mk_db.delete_record(record_id):
-        return jsonify({"message": "Record deleted"}), 200
-    return jsonify({"message": "Record not found"}), 404
+    record = Record.query.filter_by(id=record_id).first()
+
+    current_user_id = int(get_jwt_identity())
+    if current_user_id != record.user_id or not record:
+        return jsonify({"message": "Access denied"}), 403
+
+    db.session.delete(record)
+    db.session.commit()
+    return jsonify({"message": "Record deleted"}), 200
 
 
 @views.get("/record")
@@ -180,8 +228,15 @@ def get_records():
 
     if user_id is None and category_id is None:
         return jsonify({"message": "user_id or category_id is required"}), 400
-    records = mk_db.get_records_by_user_and_category(user_id, category_id)
-    return jsonify(records), 200
+
+    query = Record.query
+    if user_id is not None:
+        query = query.filter_by(user_id=user_id)
+    if category_id is not None:
+        query = query.filter_by(category_id=category_id)
+
+    filtered_records = query.all()
+    return jsonify(records_schema_for_output.dump(filtered_records, many=True)), 200
 
 
 # PostgreSQL DB endpoints
@@ -280,32 +335,3 @@ def delete_account(user_id):
     db.session.delete(account)
     db.session.commit()
     return jsonify({"message": "Account deleted"}), 200
-
-
-@views.post("/expenses")
-@jwt_required()
-def create_expense():
-    data = request.get_json()
-    err = funds_schema.validate(data)
-    if err:
-        return jsonify(err), 400
-
-    current_user_id = int(get_jwt_identity())
-    if current_user_id != data["user_id"]:
-        return jsonify({"message": "Access denied"}), 403
-
-    account = Accounts.query.filter_by(user_id=data['user_id']).first()
-    if not account:
-        return jsonify({"message": "Account not found"}), 404
-
-    if account.balance >= data['amount']:
-        account.balance -= data['amount']
-        db.session.commit()
-        response = {
-            "message": "Expense created",
-            "amount": data['amount'],
-            "date": datetime.today()
-        }
-        return jsonify(response), 201
-    else:
-        return jsonify({"message": "Insufficient funds, operation aborted"}), 400

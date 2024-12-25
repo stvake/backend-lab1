@@ -8,11 +8,21 @@ class UserSchema(Schema):
 
 
 class CategorySchema(Schema):
+    name = fields.Str(required=True)
+
+
+class CategorySchemaForOutput(Schema):
     id = fields.Int(required=True)
     name = fields.Str(required=True)
 
 
 class RecordSchema(Schema):
+    user_id = fields.Int(required=True)
+    category_id = fields.Int(required=True)
+    money_spent = fields.Float(required=True)
+
+
+class RecordSchemaForOutput(Schema):
     id = fields.Int(required=True)
     user_id = fields.Int(required=True)
     category_id = fields.Int(required=True)
