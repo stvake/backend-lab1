@@ -5,7 +5,7 @@ db = SQLAlchemy()
 
 class Accounts(db.Model):
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False, unique=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True, unique=True)
     balance = db.Column(db.Float, default=0.0, nullable=False)
 
 
@@ -25,6 +25,6 @@ class Category(db.Model):
 
 class Record(db.Model):
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
     category_id = db.Column(db.Integer, db.ForeignKey('category.id'), nullable=False)
     money_spent = db.Column(db.Float, default=0.0, nullable=False)

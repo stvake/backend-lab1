@@ -129,6 +129,7 @@ def create_category():
 
     response = {
         "message": "Category created",
+        "id": category.id,
         "date": datetime.today(),
         "status": "ok"
     }
@@ -188,7 +189,8 @@ def create_record():
             "message": "Record created",
             "amount": data['money_spent'],
             "date": datetime.today(),
-            "status": "ok"
+            "status": "ok",
+            "id": record.id
         }
         return jsonify(response), 201
     else:
@@ -201,7 +203,7 @@ def get_record(record_id):
     record = Record.query.filter_by(id=record_id).first()
 
     current_user_id = int(get_jwt_identity())
-    if current_user_id != record.user_id or not record:
+    if not record or current_user_id != record.user_id:
         return jsonify({"message": "Access denied"}), 403
 
     return jsonify(records_schema_for_output.dump(record)), 200
